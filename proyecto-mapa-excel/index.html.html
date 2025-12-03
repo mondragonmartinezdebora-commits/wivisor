@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Visor de Ubicaciones</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel {
+            padding: 15px;
+            background: #f1f1f1;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        #map {
+            width: 100%;
+            flex-grow: 1;
+        }
+
+        .btn {
+            padding: 10px 18px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="panel">
+        <button class="btn" onclick="document.getElementById('fileInput').click()">📁 Subir Excel</button>
+        <input id="fileInput" type="file" accept=".xlsx,.csv">
+
+        <button class="btn" onclick="generarMapa()">📍 Generar Mapa</button>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+
+    <script>
+        let datosExcel = [];
+        let map = L.map("map").setView([-6.64, -79.39], 14);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19
+        }).addTo(map);
+
+        let markers = L.featureGroup().addTo(map);
+
+        document.getElementById("fileInput").addEventListener("change", (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const name = file.name.toLowerCase();
+
+            if (name.endsWith(".csv")) {
+                Papa.parse(file, {
+                    header: true,
+                    complete: res => datosExcel = res.data
+                });
+            } else {
+                let reader = new FileReader();
+                reader.onload = e => {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: "array" });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    datosExcel = XLSX.utils.sheet_to_json(sheet);
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+
+        function generarMapa() {
+            if (datosExcel.length === 0) {
+                alert("Sube un archivo Excel primero.");
+                return;
+            }
+
+            markers.clearLayers();
+
+            datosExcel.forEach(row => {
+                let desc =
+                    row.descripcion || row.Descripcion || row.DESCRIPCION;
+
+                let coord =
+                    row.coordenada || row.Coordenada || row.COORDENADA;
+
+                if (!desc || !coord) return;
+
+                coord = coord.replace(/;/g, ",").replace(/\s+/g, "");
+                let partes = coord.split(",");
+
+                if (partes.length !== 2) return;
+
+                let lat = parseFloat(partes[0]);
+                let lon = parseFloat(partes[1]);
+
+                if (isNaN(lat) || isNaN(lon)) return;
+
+                let m = L.marker([lat, lon]).bindPopup(desc);
+                markers.addLayer(m);
+            });
+
+            try {
+                map.fitBounds(markers.getBounds(), { padding: [40, 40] });
+            } catch (e) {}
+        }
+    </script>
+
+</body>
+</html>
+
